@@ -94,41 +94,44 @@ const BASE_PATTERNS = [
     // Group 20: Highlight
     // Example: ==highlighted== → highlighted
     /==((?:(?!==).)+)==/.source,
-    // Group 21: Links
+    // Group 21: HTML underline tags - remove tags but keep text
+    // Example: <u>underlined</u> → underlined
+    /<u>([\s\S]*?)<\/u>/i.source,
+    // Group 22: Links
     // Example: [Google](https://google.com) → Google
     /\[([^\]]+)\]\([^)]+\)/.source,
-    // Group 22: Wiki links with display
+    // Group 23: Wiki links with display
     // Example: [[Some Page|Display Text]] → Display Text
     /\[\[[^\]|]+\|([^\]]+)\]\]/.source,
-    // Group 23: Wiki links
+    // Group 24: Wiki links
     // Example: [[Some Page]] → Some Page
     /\[\[([^\]]+)\]\]/.source,
-    // Group 24: Callout titles (supports [!...] and [!...]+/-)
+    // Group 25: Callout titles (supports [!...] and [!...]+/-)
     // Examples:
     // [!info] Optional title → (removed)
     // [!info]+ Optional title → (removed)
     // [!info]- Optional title → (removed)
     /\[![\w-]+\][+-]?(?:\s+[^\n]*)?/.source,
-    // Group 25: List markers - remove marker prefix while keeping text
+    // Group 26: List markers - remove marker prefix while keeping text
     // Example: - List item → List item, 1. Item → Item
     /^(?:[-*+]\s+|\d+\.\s+)/.source,
-    // Group 26: Blockquotes - remove entire line
+    // Group 27: Blockquotes - remove entire line
     // Example: > Quote → (removed), >Quote → (removed)
     /^>\s?.*$/m.source,
-    // Group 27: Heading markers (always strip the # symbols, keep the text)
+    // Group 28: Heading markers (always strip the # symbols, keep the text)
     // Example: # Title → Title, ## Section → Section
     /^(#+)\s+(.*)$/m.source,
-    // Group 28: Markdown tables - matches table rows (lines with pipes)
+    // Group 29: Markdown tables - matches table rows (lines with pipes)
     // Example: | Header | Another | → (removed)
     // This captures lines that start with optional whitespace, then |, and contain at least one more |
     /^\s*\|.*\|.*$/m.source,
-    // Group 29: Inline footnotes
+    // Group 30: Inline footnotes
     // Example: text ^[detail] → text
     /\^\[[^\]]*?]/.source,
-    // Group 30: Footnote references
+    // Group 31: Footnote references
     // Example: reference[^1] → reference
     /\[\^[^\]]+]/.source,
-    // Group 31: Footnote definitions
+    // Group 32: Footnote definitions
     // Example: [^1]: Footnote text → (removed)
     /^\s*\[\^[^\]]+]:.*$/m.source
 ];
