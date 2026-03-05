@@ -43,6 +43,7 @@ import {
     PROPERTIES_ROOT_VIRTUAL_FOLDER_ID,
     STORAGE_KEYS,
     type DualPaneOrientation,
+    type PinnedNotes,
     type UXPreferences,
     type VisibilityPreferences
 } from './types';
@@ -84,6 +85,7 @@ import {
     isBooleanRecordValue,
     isPlainObjectRecordValue,
     isStringRecordValue,
+    threeWayMergePinnedNotes,
     sanitizeRecord
 } from './utils/recordUtils';
 import { isRecord } from './utils/typeGuards';
@@ -273,6 +275,9 @@ export default class NotebookNavigatorPlugin extends Plugin implements ISettings
     // Flag indicating plugin is being unloaded to prevent operations during shutdown
     private isUnloading = false;
     private isHandlingExternalSettingsUpdate = false;
+    // Snapshot of pinnedNotes as last loaded from or written to data.json.
+    // Used as the base for three-way merging when external sync changes arrive.
+    private lastSyncedPinnedNotes: PinnedNotes = Object.create(null) as PinnedNotes;
     // User preference for dual-pane mode (persisted in localStorage, not settings)
     private dualPanePreference = true;
     // User preference for dual-pane orientation (persisted in localStorage)
@@ -465,7 +470,24 @@ export default class NotebookNavigatorPlugin extends Plugin implements ISettings
         }
 
         try {
+            // Capture the local state and the merge base before reloading from disk.
+            const base = this.lastSyncedPinnedNotes;
+            const local = clonePinnedNotesRecord(this.settings.pinnedNotes);
+
+            // loadSettings() replaces this.settings with what is on disk (incoming)
+            // and updates this.lastSyncedPinnedNotes to the incoming state.
             await this.loadSettings();
+
+            const incoming = this.settings.pinnedNotes;
+
+            // Three-way merge: keeps local additions/removals that happened since
+            // the last sync while also accepting remote additions/removals.
+            const { merged, changed } = threeWayMergePinnedNotes(base, local, incoming);
+            if (changed) {
+                this.settings.pinnedNotes = merged;
+                await this.saveSettings();
+            }
+
             this.dualPanePreference = this.settings.dualPane;
             this.dualPaneOrientationPreference = this.settings.dualPaneOrientation;
             const previousIncludeDescendantNotes = this.uxPreferences.includeDescendantNotes;
@@ -654,6 +676,9 @@ export default class NotebookNavigatorPlugin extends Plugin implements ISettings
         if (needsPersistedCleanup) {
             await this.saveData(this.getPersistableSettings());
         }
+
+        // Record what pinnedNotes look like on disk so three-way merge has a base.
+        this.lastSyncedPinnedNotes = clonePinnedNotesRecord(this.settings.pinnedNotes);
 
         return isFirstLaunch;
     }
@@ -2254,6 +2279,8 @@ export default class NotebookNavigatorPlugin extends Plugin implements ISettings
         this.refreshMatcherCachesIfNeeded();
         const dataToPersist = this.getPersistableSettings();
         await this.saveData(dataToPersist);
+        // Update the sync baseline so subsequent three-way merges use the written state.
+        this.lastSyncedPinnedNotes = clonePinnedNotesRecord(this.settings.pinnedNotes);
     }
 
     /**

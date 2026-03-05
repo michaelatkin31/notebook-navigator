@@ -126,6 +126,72 @@ export function clonePinnedNotesRecord(value: unknown): Record<string, PinnedNot
     return cloned;
 }
 
+/**
+ * Three-way merge for pinned notes using a common base (last synced state).
+ *
+ * For each context flag the rule is:
+ *   - If the local value changed relative to base, keep the local change.
+ *   - Otherwise accept the incoming (remote) value.
+ *
+ * This correctly handles:
+ *   - Pins added on either device.
+ *   - Pins removed (unpinned) on either device.
+ *   - Independent edits on both devices (local wins on conflict).
+ *
+ * Returns the merged record and whether it differs from `incoming`
+ * (so the caller knows if a write-back is needed).
+ */
+export function threeWayMergePinnedNotes(
+    base: Record<string, PinnedNoteContextValue>,
+    local: Record<string, PinnedNoteContextValue>,
+    incoming: Record<string, PinnedNoteContextValue>
+): { merged: Record<string, PinnedNoteContextValue>; changed: boolean } {
+    const merged = sanitizeRecord<PinnedNoteContextValue>(undefined);
+    const defaultCtx: PinnedNoteContextValue = { folder: false, tag: false, property: false };
+
+    // Collect every path that appears in any of the three records
+    const allPaths = new Set<string>();
+    for (const path of Object.keys(base)) allPaths.add(path);
+    for (const path of Object.keys(local)) allPaths.add(path);
+    for (const path of Object.keys(incoming)) allPaths.add(path);
+
+    let changed = false;
+
+    for (const path of allPaths) {
+        const b = base[path] ?? defaultCtx;
+        const l = local[path] ?? defaultCtx;
+        const i = incoming[path] ?? defaultCtx;
+
+        // Per-flag: if local changed from base keep local, otherwise accept incoming
+        const mergedCtx: PinnedNoteContextValue = {
+            folder: l.folder !== b.folder ? l.folder : i.folder,
+            tag: l.tag !== b.tag ? l.tag : i.tag,
+            property: l.property !== b.property ? l.property : i.property
+        };
+
+        // Only include entries with at least one active context
+        if (mergedCtx.folder || mergedCtx.tag || mergedCtx.property) {
+            merged[path] = mergedCtx;
+        }
+
+        // Track whether the merged result differs from incoming
+        if (!changed) {
+            const inHasEntry = path in incoming;
+            const mHasEntry = mergedCtx.folder || mergedCtx.tag || mergedCtx.property;
+
+            if (mHasEntry !== inHasEntry) {
+                changed = true;
+            } else if (mHasEntry && inHasEntry) {
+                if (mergedCtx.folder !== i.folder || mergedCtx.tag !== i.tag || mergedCtx.property !== i.property) {
+                    changed = true;
+                }
+            }
+        }
+    }
+
+    return { merged, changed };
+}
+
 export function casefold(value: string): string {
     const trimmed = value.trim();
     if (trimmed.length === 0) {
