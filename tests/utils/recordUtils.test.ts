@@ -22,6 +22,7 @@ import {
     foldSearchText,
     foldSearchTextFromLowercase,
     isStringRecordValue,
+    mergePinnedNotesRecords,
     normalizePinnedNoteContext,
     sanitizeRecord
 } from '../../src/utils/recordUtils';
@@ -138,5 +139,62 @@ describe('pinned note record helpers', () => {
         expect(cloned['b.md']).toEqual({ folder: false, tag: false, property: false });
         expect(cloned['c.md']).toEqual({ folder: false, tag: false, property: false });
         expect(cloned['d.md']).toEqual({ folder: true, tag: true, property: true });
+    });
+});
+
+describe('mergePinnedNotesRecords', () => {
+    it('preserves local-only entries that are missing from incoming', () => {
+        const local = { 'a.md': { folder: true, tag: false, property: false } };
+        const incoming = { 'b.md': { folder: false, tag: true, property: false } };
+
+        const { merged, changed } = mergePinnedNotesRecords(local, incoming);
+
+        expect(merged['a.md']).toEqual({ folder: true, tag: false, property: false });
+        expect(merged['b.md']).toEqual({ folder: false, tag: true, property: false });
+        expect(changed).toBe(true);
+    });
+
+    it('OR-merges context flags for entries present in both', () => {
+        const local = { 'a.md': { folder: true, tag: false, property: false } };
+        const incoming = { 'a.md': { folder: false, tag: true, property: false } };
+
+        const { merged, changed } = mergePinnedNotesRecords(local, incoming);
+
+        expect(merged['a.md']).toEqual({ folder: true, tag: true, property: false });
+        expect(changed).toBe(true);
+    });
+
+    it('reports no change when local is a subset of incoming', () => {
+        const local = { 'a.md': { folder: true, tag: false, property: false } };
+        const incoming = { 'a.md': { folder: true, tag: true, property: false } };
+
+        const { merged, changed } = mergePinnedNotesRecords(local, incoming);
+
+        expect(merged['a.md']).toEqual({ folder: true, tag: true, property: false });
+        expect(changed).toBe(false);
+    });
+
+    it('returns a null-prototype record', () => {
+        const { merged } = mergePinnedNotesRecords({}, {});
+
+        expect(Object.getPrototypeOf(merged)).toBeNull();
+    });
+
+    it('handles empty local gracefully', () => {
+        const incoming = { 'a.md': { folder: true, tag: false, property: false } };
+
+        const { merged, changed } = mergePinnedNotesRecords({}, incoming);
+
+        expect(merged['a.md']).toEqual({ folder: true, tag: false, property: false });
+        expect(changed).toBe(false);
+    });
+
+    it('handles empty incoming gracefully', () => {
+        const local = { 'a.md': { folder: true, tag: false, property: false } };
+
+        const { merged, changed } = mergePinnedNotesRecords(local, {});
+
+        expect(merged['a.md']).toEqual({ folder: true, tag: false, property: false });
+        expect(changed).toBe(true);
     });
 });

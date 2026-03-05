@@ -126,6 +126,50 @@ export function clonePinnedNotesRecord(value: unknown): Record<string, PinnedNot
     return cloned;
 }
 
+/**
+ * Merges two pinned notes records by taking the union of all entries.
+ * For entries present in both, context flags are OR-ed together so no pins are lost.
+ * Returns the merged record and whether it differs from the incoming record.
+ */
+export function mergePinnedNotesRecords(
+    local: Record<string, PinnedNoteContextValue>,
+    incoming: Record<string, PinnedNoteContextValue>
+): { merged: Record<string, PinnedNoteContextValue>; changed: boolean } {
+    const merged = sanitizeRecord<PinnedNoteContextValue>(undefined);
+    let changed = false;
+
+    // Start with all incoming entries
+    for (const [path, context] of Object.entries(incoming)) {
+        merged[path] = { ...context };
+    }
+
+    // Merge in local entries
+    for (const [path, localContext] of Object.entries(local)) {
+        const existing = merged[path];
+        if (!existing) {
+            // Entry only exists locally — preserve it
+            merged[path] = { ...localContext };
+            changed = true;
+        } else {
+            // Entry exists in both — OR the context flags
+            if (localContext.folder && !existing.folder) {
+                existing.folder = true;
+                changed = true;
+            }
+            if (localContext.tag && !existing.tag) {
+                existing.tag = true;
+                changed = true;
+            }
+            if (localContext.property && !existing.property) {
+                existing.property = true;
+                changed = true;
+            }
+        }
+    }
+
+    return { merged, changed };
+}
+
 export function casefold(value: string): string {
     const trimmed = value.trim();
     if (trimmed.length === 0) {

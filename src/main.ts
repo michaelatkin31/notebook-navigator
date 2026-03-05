@@ -84,6 +84,7 @@ import {
     isBooleanRecordValue,
     isPlainObjectRecordValue,
     isStringRecordValue,
+    mergePinnedNotesRecords,
     sanitizeRecord
 } from './utils/recordUtils';
 import { isRecord } from './utils/typeGuards';
@@ -465,7 +466,19 @@ export default class NotebookNavigatorPlugin extends Plugin implements ISettings
         }
 
         try {
+            // Capture local pinned notes before reloading so they survive sync overwrites.
+            const localPinnedNotes = clonePinnedNotesRecord(this.settings.pinnedNotes);
+
             await this.loadSettings();
+
+            // Merge local pins with the incoming synced pins to prevent data loss.
+            // Uses a union strategy: pins present on either device are preserved.
+            const { merged, changed } = mergePinnedNotesRecords(localPinnedNotes, this.settings.pinnedNotes);
+            if (changed) {
+                this.settings.pinnedNotes = merged;
+                await this.saveSettings();
+            }
+
             this.dualPanePreference = this.settings.dualPane;
             this.dualPaneOrientationPreference = this.settings.dualPaneOrientation;
             const previousIncludeDescendantNotes = this.uxPreferences.includeDescendantNotes;
