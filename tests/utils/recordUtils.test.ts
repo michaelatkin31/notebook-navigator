@@ -22,6 +22,7 @@ import {
     foldSearchText,
     foldSearchTextFromLowercase,
     isStringRecordValue,
+    threeWayMergePinnedNotes,
     normalizePinnedNoteContext,
     sanitizeRecord
 } from '../../src/utils/recordUtils';
@@ -138,5 +139,103 @@ describe('pinned note record helpers', () => {
         expect(cloned['b.md']).toEqual({ folder: false, tag: false, property: false });
         expect(cloned['c.md']).toEqual({ folder: false, tag: false, property: false });
         expect(cloned['d.md']).toEqual({ folder: true, tag: true, property: true });
+    });
+});
+
+describe('threeWayMergePinnedNotes', () => {
+    const pin = (f: boolean, t: boolean, p: boolean) => ({ folder: f, tag: t, property: p });
+
+    it('preserves a local addition not in base or incoming', () => {
+        const base = {};
+        const local = { 'a.md': pin(true, false, false) };
+        const incoming = {};
+
+        const { merged, changed } = threeWayMergePinnedNotes(base, local, incoming);
+
+        expect(merged['a.md']).toEqual(pin(true, false, false));
+        expect(changed).toBe(true);
+    });
+
+    it('accepts a remote addition not in base or local', () => {
+        const base = {};
+        const local = {};
+        const incoming = { 'a.md': pin(false, true, false) };
+
+        const { merged, changed } = threeWayMergePinnedNotes(base, local, incoming);
+
+        expect(merged['a.md']).toEqual(pin(false, true, false));
+        expect(changed).toBe(false);
+    });
+
+    it('keeps both when different notes are added on each side', () => {
+        const base = {};
+        const local = { 'a.md': pin(true, false, false) };
+        const incoming = { 'b.md': pin(false, true, false) };
+
+        const { merged, changed } = threeWayMergePinnedNotes(base, local, incoming);
+
+        expect(merged['a.md']).toEqual(pin(true, false, false));
+        expect(merged['b.md']).toEqual(pin(false, true, false));
+        expect(changed).toBe(true);
+    });
+
+    it('respects a remote unpin (entry removed in incoming)', () => {
+        const base = { 'a.md': pin(true, false, false) };
+        const local = { 'a.md': pin(true, false, false) };
+        const incoming = {};
+
+        const { merged, changed } = threeWayMergePinnedNotes(base, local, incoming);
+
+        expect(merged['a.md']).toBeUndefined();
+        expect(changed).toBe(false);
+    });
+
+    it('respects a local unpin (entry removed in local)', () => {
+        const base = { 'a.md': pin(true, false, false) };
+        const local = {};
+        const incoming = { 'a.md': pin(true, false, false) };
+
+        const { merged, changed } = threeWayMergePinnedNotes(base, local, incoming);
+
+        expect(merged['a.md']).toBeUndefined();
+        expect(changed).toBe(true);
+    });
+
+    it('merges independent context flag changes on the same entry', () => {
+        const base = { 'a.md': pin(true, false, false) };
+        const local = { 'a.md': pin(true, true, false) }; // added tag locally
+        const incoming = { 'a.md': pin(true, false, true) }; // added property remotely
+
+        const { merged, changed } = threeWayMergePinnedNotes(base, local, incoming);
+
+        expect(merged['a.md']).toEqual(pin(true, true, true));
+        expect(changed).toBe(true);
+    });
+
+    it('reports no change when local has no modifications relative to base', () => {
+        const base = { 'a.md': pin(true, false, false) };
+        const local = { 'a.md': pin(true, false, false) };
+        const incoming = { 'a.md': pin(true, true, false) };
+
+        const { merged, changed } = threeWayMergePinnedNotes(base, local, incoming);
+
+        expect(merged['a.md']).toEqual(pin(true, true, false));
+        expect(changed).toBe(false);
+    });
+
+    it('returns a null-prototype record', () => {
+        const { merged } = threeWayMergePinnedNotes({}, {}, {});
+
+        expect(Object.getPrototypeOf(merged)).toBeNull();
+    });
+
+    it('drops entries where all contexts resolve to false', () => {
+        const base = { 'a.md': pin(true, false, false) };
+        const local = { 'a.md': pin(false, false, false) }; // unpinned locally
+        const incoming = { 'a.md': pin(true, false, false) };
+
+        const { merged } = threeWayMergePinnedNotes(base, local, incoming);
+
+        expect(merged['a.md']).toBeUndefined();
     });
 });
